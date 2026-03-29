@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const ownerEmail = process.env.GOOGLE_DRIVE_OWNER_EMAIL;
     const docName = `${doc_type === "estimate" ? "견적서" : "거래명세서"}_${recipient}_${doc_number}`;
 
     // 2. Copy template into shared folder
@@ -63,7 +64,21 @@ export async function POST(req: NextRequest) {
     });
     const newDocId = copyRes.data.id!;
 
-    // 3. Replace placeholders
+    // 3. Transfer ownership to personal Google account (fixes storage quota)
+    if (ownerEmail) {
+      await drive.permissions.create({
+        fileId: newDocId,
+        transferOwnership: true,
+        supportsAllDrives: true,
+        requestBody: {
+          type: "user",
+          role: "owner",
+          emailAddress: ownerEmail,
+        },
+      });
+    }
+
+    // 4. Replace placeholders
     const replacements: Record<string, string> = {
       "{{TITLE}}": doc_type === "estimate" ? "ESTIMATE" : "INVOICE",
       "{{DOC_NUMBER}}": doc_number || "",
@@ -93,7 +108,7 @@ export async function POST(req: NextRequest) {
       requestBody: { requests },
     });
 
-    // 4. Export as PDF
+    // 5. Export as PDF
     const pdfRes = await drive.files.export(
       { fileId: newDocId, mimeType: "application/pdf" },
       { responseType: "arraybuffer" }
@@ -101,7 +116,7 @@ export async function POST(req: NextRequest) {
     const pdfBuffer = Buffer.from(pdfRes.data as ArrayBuffer);
     const pdfBase64 = pdfBuffer.toString("base64");
 
-    // 5. Return result
+    // 6. Return result
     return NextResponse.json({
       success: true,
       google_doc_id: newDocId,
