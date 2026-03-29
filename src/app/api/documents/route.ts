@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      doc_type,       // "estimate" | "invoice"
+      doc_type,
       doc_number,
       recipient,
       doc_name,
@@ -49,11 +49,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Template ID not configured" }, { status: 500 });
     }
 
-    // 2. Copy template
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const docName = `${doc_type === "estimate" ? "견적서" : "거래명세서"}_${recipient}_${doc_number}`;
+
+    // 2. Copy template into shared folder
     const copyRes = await drive.files.copy({
       fileId: templateId,
+      supportsAllDrives: true,
       requestBody: {
-        name: `${doc_type === "estimate" ? "견적서" : "거래명세서"}_${recipient}_${doc_number}`,
+        name: docName,
+        parents: folderId ? [folderId] : undefined,
       },
     });
     const newDocId = copyRes.data.id!;
@@ -102,7 +107,7 @@ export async function POST(req: NextRequest) {
       google_doc_id: newDocId,
       google_doc_url: `https://docs.google.com/document/d/${newDocId}/edit`,
       pdf_base64: pdfBase64,
-      pdf_filename: `${doc_type === "estimate" ? "견적서" : "거래명세서"}_${recipient}_${doc_number}.pdf`,
+      pdf_filename: `${docName}.pdf`,
     });
   } catch (error: unknown) {
     console.error("Document generation error:", error);
